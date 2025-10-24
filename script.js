@@ -16,13 +16,10 @@ const nextBtn = document.getElementById("nextBtn");
 const reloadBtn = document.getElementById("reloadBtn");
 const muteBtn = document.getElementById("muteBtn");
 const videoTitle = document.getElementById("videoTitle");
-const playPauseOverlay = document.getElementById("playPauseOverlay");
 const errorOverlay = document.getElementById("errorOverlay");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const videoListContainer = document.getElementById("videoListContainer");
 const pausedOverlay = document.getElementById("pausedOverlay");
-const resumeBtn = document.getElementById("resumeBtn");
-
 
 // ===========================
 // 🧭 State
@@ -95,10 +92,7 @@ async function loadVideoList(forceReload = false) {
 }
 
 // ===========================
-// ▶️ Load video
-// ===========================
-// ===========================
-// ▶️ Load video (phiên bản tối ưu)
+// ▶️ Load video (tối ưu)
 // ===========================
 function loadVideo(index, resumeTime = 0, direction = "up") {
   if (!videoList.length || isLoading) return;
@@ -114,14 +108,14 @@ function loadVideo(index, resumeTime = 0, direction = "up") {
   const url = videoList[currentIndex].url;
   seekBar.disabled = true;
 
-  // 🧹 Cleanup video cũ
+  // 🧹 Cleanup
   if (hls) {
     hls.destroy();
     hls = null;
   }
   player.pause();
   player.removeAttribute("src");
-  player.preload = "metadata"; // ✅ preload metadata giúp load nhanh hơn
+  player.preload = "metadata"; // ✅ preload metadata giúp giảm delay
   player.load();
   player.classList.remove("showing");
 
@@ -143,20 +137,16 @@ function loadVideo(index, resumeTime = 0, direction = "up") {
     "video-slide-down-enter-active"
   );
 
-  // Áp dụng hiệu ứng thoát (slide lên/xuống)
   player.classList.add(`video-slide-${direction}-exit`);
   requestAnimationFrame(() => {
     player.classList.add(`video-slide-${direction}-exit-active`);
   });
 
-  // Sau 150ms thì đổi video mới
   setTimeout(() => {
     player.classList.remove(
       `video-slide-${direction}-exit`,
       `video-slide-${direction}-exit-active`
     );
-
-    // Áp dụng hiệu ứng xuất hiện video mới
     player.classList.add(`video-slide-${direction}-enter`);
     requestAnimationFrame(() => {
       player.classList.add(`video-slide-${direction}-enter-active`);
@@ -167,7 +157,7 @@ function loadVideo(index, resumeTime = 0, direction = "up") {
       updateMuteIcon();
 
       // ===========================
-      // 🎬 Load video theo định dạng
+      // 🎬 Load video
       // ===========================
       if (url.endsWith(".m3u8")) {
         if (Hls.isSupported()) {
@@ -197,7 +187,7 @@ function loadVideo(index, resumeTime = 0, direction = "up") {
         isLoading = false;
         player.classList.add("showing");
 
-        // ✅ Lưu lại thời gian đang xem để resume
+        // ✅ Lưu thời gian xem
         timeSaveInterval = setInterval(() => {
           if (!player.paused && player.currentTime > 0) {
             localStorage.setItem(LAST_TIME_KEY, player.currentTime);
@@ -214,18 +204,15 @@ function loadVideo(index, resumeTime = 0, direction = "up") {
         preloadVideo.load();
       };
 
-      // 🔁 Khi phát xong → tự chuyển video tiếp theo
       player.onended = () => loadVideo(currentIndex + 1, 0, "up");
 
-      // ⏳ Timeout an toàn 20s
+      // ⏳ Timeout tăng lên 20s
       loadTimeout = setTimeout(() => {
         if (!hasPlayed) showLoadError();
       }, 20000);
     }, 150);
   }, 150);
 }
-
-
 
 // ===========================
 // 🕒 Resume video cuối
@@ -247,12 +234,10 @@ function renderVideoList() {
   videoListContainer.innerHTML = "";
   videoList.forEach((video, index) => {
     const li = document.createElement("li");
-    li.className =
-      "flex items-center justify-between px-2 py-2 hover:bg-gray-800/30 transition";
+    li.className = "flex items-center justify-between px-2 py-2 hover:bg-gray-800/30 transition";
 
     const thumb = document.createElement("div");
-    thumb.className =
-      "w-16 h-9 rounded bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-xs font-bold";
+    thumb.className = "w-16 h-9 rounded bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-xs font-bold";
     thumb.textContent = `#${video.id}`;
 
     const info = document.createElement("div");
@@ -283,12 +268,13 @@ function highlightCurrentVideo() {
   const now = new Date();
   const formattedTime = `${now.getDate().toString().padStart(2, "0")}-${(
     now.getMonth() + 1
-  )
-    .toString()
-    .padStart(2, "0")}-${now.getFullYear()} ${now
+  ).toString().padStart(2, "0")}-${now.getFullYear()} ${now
     .getHours()
     .toString()
-    .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now
+    .padStart(2, "0")}:${now
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}:${now
     .getSeconds()
     .toString()
     .padStart(2, "0")}`;
@@ -318,17 +304,16 @@ function hideError() {
 }
 
 function showLoading() {
-  if (!loadingOverlay.classList.contains("show")) {
-    loadingOverlay.classList.add("show");
-    loadingOverlay.style.backdropFilter = "blur(6px)";
-  }
+  loadingOverlay.classList.remove("hidden");
 }
 
 function hideLoading() {
-  loadingOverlay.classList.remove("show");
-  loadingOverlay.style.backdropFilter = "blur(4px)";
+  loadingOverlay.classList.add("hidden");
 }
 
+// ===========================
+// ▶️ Safe Play
+// ===========================
 function safePlay(time = 0) {
   if (time > 0) player.currentTime = time;
   const p = player.play();
@@ -353,28 +338,12 @@ function updateMuteIcon() {
 }
 
 // ===========================
-// 🖱️ Click video Pause/Play
+// 🖱️ Click video để Play/Pause
 // ===========================
 document.querySelector(".video-container").addEventListener("click", (e) => {
   if (e.target === muteBtn) return;
-  if (player.paused) {
-    player.play();
-    // showPlayPauseIcon("pause");
-  } else {
-    player.pause();
-    // player.classList.remove("showing");
-    // showPlayPauseIcon("play");
-  }
+  player.paused ? player.play() : player.pause();
 });
-
-// function showPlayPauseIcon(state) {
-//   playPauseOverlay.classList.remove("hidden");
-//   playPauseOverlay.querySelector("i").className =
-//     state === "play" ?
-//     "ri-play-fill text-white text-6xl" :
-//     "ri-pause-fill text-white text-6xl";
-//   setTimeout(() => playPauseOverlay.classList.add("hidden"), 600);
-// }
 
 // ===========================
 // ⏪ Tua & tốc độ
@@ -386,45 +355,38 @@ player.addEventListener("timeupdate", () => {
 });
 seekBar.addEventListener("input", () => {
   if (player.duration && isFinite(player.duration)) {
-    showLoading(); // 👈 hiện loading khi tua
+    showLoading();
     player.currentTime = (seekBar.value / 100) * player.duration;
-    player.play(); // tua xong tự phát
+    player.play();
   }
 });
 speedSelect.addEventListener("change", () => {
   player.playbackRate = parseFloat(speedSelect.value);
 });
-// Khi video pause -> show overlay
-player.addEventListener("pause", () => {
-  if (!player.ended) {
-    pausedOverlay.classList.add("show");
-  }
-});
+player.addEventListener("playing", () => hideLoading());
 
-// Khi video phát -> ẩn overlay
+// Khi pause -> hiện overlay
+player.addEventListener("pause", () => {
+  if (!player.ended) pausedOverlay.classList.add("show");
+});
 player.addEventListener("play", () => {
   pausedOverlay.classList.remove("show");
 });
-player.addEventListener("playing", () => {
-  hideLoading(); // 👈 ẩn loading khi video phát trở lại
-});
-// Nút resume
-pausedOverlay.addEventListener("click", () => {
-  player.play();
-});
+pausedOverlay.addEventListener("click", () => player.play());
+
 // ===========================
-// ⬆⬇ Cuộn để chuyển
+// ⬆⬇ Scroll chuyển video
 // ===========================
-// PC scroll
 document.querySelector(".video-container").addEventListener("wheel", (e) => {
   const now = Date.now();
   if (isLoading || now - lastScrollTime < SCROLL_COOLDOWN) return;
   lastScrollTime = now;
-  if (e.deltaY > 0) loadVideo(currentIndex + 1, 0, "up");
-  else loadVideo(currentIndex - 1, 0, "down");
+  e.deltaY > 0 ? loadVideo(currentIndex + 1, 0, "up") : loadVideo(currentIndex - 1, 0, "down");
 });
 
-// Mobile swipe
+// ===========================
+// 📱 Vuốt chuyển video mobile
+// ===========================
 let touchStartY = 0;
 let touchEndY = 0;
 const videoContainer = document.querySelector(".video-container");
@@ -440,10 +402,10 @@ videoContainer.addEventListener("touchend", (e) => {
   else loadVideo(currentIndex + 1, 0, "up");
 });
 
-
 // ===========================
 // ⏭ Buttons
 // ===========================
-prevBtn.addEventListener("click", () => loadVideo(currentIndex - 1));
-nextBtn.addEventListener("click", () => loadVideo(currentIndex + 1));
+prevBtn.addEventListener("click", () => loadVideo(currentIndex - 1, 0, "down"));
+nextBtn.addEventListener("click", () => loadVideo(currentIndex + 1, 0, "up"));
 reloadBtn.addEventListener("click", () => loadVideoList(true));
+
