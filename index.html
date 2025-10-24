@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TikTok - Make Your Day</title>
+    <link rel="icon" href="favicon.ico">
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" />
+    <script src="hls.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#FF2D55",
+                        secondary: "#5851DB"
+                    },
+                    borderRadius: {
+                        none: "0px",
+                        sm: "4px",
+                        DEFAULT: "8px",
+                        md: "12px",
+                        lg: "16px",
+                        xl: "20px",
+                        "2xl": "24px",
+                        "3xl": "32px",
+                        full: "9999px",
+                        button: "8px",
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        /* Global styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Overlays - Cho phép click xuyên qua overlay */
+        #playPauseOverlay,
+        #loadingOverlay,
+        #errorOverlay {
+            pointer-events: none;
+        }
+
+        /* Mute button - Riêng nút mute vẫn có pointer-events mặc định để click được */
+        #muteBtn {
+            position: absolute;
+            bottom: 6rem;
+            pointer-events: auto;
+            left: 1rem;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.25s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+            border: 2px solid transparent;
+
+        }
+
+        #muteBtn:hover {
+            background: rgba(0, 0, 0, 0.8);
+            transform: scale(1.08);
+        }
+
+        #muteBtn.muted {
+            background: rgba(220, 38, 38, 0.9);
+            /* đỏ khi tắt âm */
+            border-color: rgba(255, 255, 255, 0.7);
+        }
+
+        #muteBtn.unmuted {
+            background: rgba(34, 197, 94, 0.9);
+            /* xanh khi bật âm */
+            border-color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Video container */
+        .video-container {
+            position: relative;
+            height: calc(100vh - 4rem);
+            overflow: hidden;
+        }
+
+        /* Video element */
+        video {
+            object-fit: contain;
+            background-color: black;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        video.showing {
+            opacity: 1;
+        }
+
+        /* Video overlay */
+        .video-overlay {
+            background: linear-gradient(to bottom, transparent 70%, rgba(0, 0, 0, 0.7) 100%);
+        }
+
+        /* Action bar buttons */
+        .action-bar button {
+            transition: all 0.2s;
+        }
+
+        .action-bar button:hover {
+            transform: scale(1.1);
+        }
+
+        .action-bar button:active {
+            transform: scale(0.95);
+        }
+
+        /* Controls bar */
+        #controls-bar {
+            position: absolute;
+            left: 1rem;
+            bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        /* Speed selector */
+        select#speed {
+            position: relative;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 9999px;
+            padding: 0.5rem 1rem;
+            bottom: 3rem;
+        }
+
+        /* Video list container - Đảm bảo cuộn trong sidebar không cuộn trang chính */
+        #videoListContainer {
+            overscroll-behavior: contain;
+        }
+
+        #videoListContainer li {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            transition: background-color 0.2s;
+        }
+
+        #videoListContainer li:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        #videoListContainer li.active {
+            background-color: rgba(255, 255, 255, 0.15);
+            font-weight: 600;
+        }
+
+        #videoListContainer li.watched {
+            opacity: 0.6;
+            /* làm mờ thumbnail */
+            position: relative;
+        }
+
+        #videoListContainer li.watched::after {
+            content: "✓";
+            position: absolute;
+            top: 6px;
+            right: 10px;
+            background: #00ff88;
+            color: black;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Video thumbnails */
+        .video-thumb {
+            width: 80px;
+            height: 45px;
+            background: #000;
+            object-fit: cover;
+            flex-shrink: 0;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .active-video {
+            background-color: rgba(31, 41, 55, 0.5);
+            /* tương đương bg-gray-800/50 */
+        }
+
+        .video-thumb.loaded {
+            opacity: 1;
+        }
+
+        /* Animations */
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+
+<body class="bg-black text-white">
+    <div id="app" class="h-full flex flex-col">
+        <div id="main-content" class="container mx-auto flex-1 relative flex">
+            <!-- 📜 Sidebar bên trái -->
+            <div id="videoListSidebar"
+                class="hidden lg:flex flex-col w-64 bg-black/30 backdrop-blur-sm border-r border-gray-800">
+                <div class="p-4 text-lg font-semibold border-b border-gray-700">
+                    Danh sách video
+                </div>
+                <ul id="videoListContainer"
+                    class="flex-1 divide-y divide-gray-700 overflow-y-auto max-h-[calc(100vh-4rem)]">
+                </ul>
+
+            </div>
+
+            <!-- 📽️ Video chính -->
+            <div id="feed-view" class="flex-1 relative">
+                <div class="video-container">
+                    <video id="player" autoplay playsinline class="w-full h-full object-contain bg-black"></video>
+
+                    <!-- Icon pause/play -->
+                    <div id="playPauseOverlay"
+                        class="hidden absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+                        <i class="ri-play-fill text-white text-6xl"></i>
+                    </div>
+
+                    <!-- Thông báo lỗi -->
+                    <div id="errorOverlay"
+                        class="hidden absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                        <span class="text-white text-xl font-semibold">Lỗi khi load video, đang chuyển video...</span>
+                    </div>
+
+                    <!-- Loading spinner -->
+                    <div id="loadingOverlay"
+                        class="hidden absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+                        <div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin">
+                        </div>
+                    </div>
+
+                    <!-- Overlay controls -->
+                    <div class="video-overlay absolute inset-0 flex flex-col justify-between p-4">
+                        <!-- Top bar -->
+                        <div class="flex justify-between items-center">
+                            <div class="text-2xl font-['Pacifico']">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 118 30"
+                                    alt="TikTok" height="42" width="118"
+                                    class="css-1pylepm-5e6d46e3--StyledLogoDark e1487oh22">
+                                    <path fill="#25F4EE"
+                                        d="M9.875 11.842v-1.119A9 9 0 0 0 8.7 10.64c-4.797-.006-8.7 3.9-8.7 8.708a8.7 8.7 0 0 0 3.718 7.134A8.68 8.68 0 0 1 1.38 20.55c0-4.737 3.794-8.598 8.495-8.707">
+                                    </path>
+                                    <path fill="#25F4EE"
+                                        d="M10.087 24.526c2.14 0 3.89-1.707 3.966-3.83l.007-18.968h3.462a7 7 0 0 1-.109-1.202h-4.727l-.006 18.968a3.98 3.98 0 0 1-3.967 3.83 3.9 3.9 0 0 1-1.846-.46 3.95 3.95 0 0 0 3.22 1.662m13.905-16.36V7.111a6.5 6.5 0 0 1-3.584-1.067 6.57 6.57 0 0 0 3.584 2.122">
+                                    </path>
+                                    <path fill="#FE2C55"
+                                        d="M20.41 6.044a6.54 6.54 0 0 1-1.617-4.316h-1.265a6.56 6.56 0 0 0 2.881 4.316M8.707 15.365a3.98 3.98 0 0 0-3.974 3.976c0 1.528.87 2.858 2.134 3.523a3.94 3.94 0 0 1-.754-2.321 3.98 3.98 0 0 1 3.973-3.976c.41 0 .805.07 1.176.185v-4.833a9 9 0 0 0-1.176-.083c-.07 0-.134.006-.204.006v3.708a4 4 0 0 0-1.175-.185">
+                                    </path>
+                                    <path fill="#FE2C55"
+                                        d="M23.992 8.166v3.676a11.25 11.25 0 0 1-6.579-2.116v9.622c0 4.8-3.903 8.713-8.706 8.713a8.67 8.67 0 0 1-4.99-1.579 8.7 8.7 0 0 0 6.37 2.781c4.797 0 8.706-3.906 8.706-8.714v-9.621a11.25 11.25 0 0 0 6.579 2.116v-4.73q-.718-.002-1.38-.148">
+                                    </path>
+                                    <path fill="#fff"
+                                        d="M17.413 19.348V9.726a11.25 11.25 0 0 0 6.58 2.116V8.166a6.57 6.57 0 0 1-3.584-2.122 6.6 6.6 0 0 1-2.887-4.316h-3.463l-.006 18.968a3.98 3.98 0 0 1-3.967 3.83 3.99 3.99 0 0 1-3.225-1.656 3.99 3.99 0 0 1-2.134-3.523A3.98 3.98 0 0 1 8.7 15.372c.409 0 .805.07 1.176.185v-3.708c-4.702.103-8.496 3.964-8.496 8.701 0 2.29.888 4.373 2.338 5.933a8.67 8.67 0 0 0 4.989 1.58c4.797 0 8.706-3.913 8.706-8.715M30.048 8.179h14.775l-1.355 4.232h-3.832v15.644h-4.778V12.41l-4.804.006zm38.984 0h15.12l-1.354 4.232h-4.172v15.644h-4.784V12.41l-4.803.006zM45.73 14.502h4.733v13.553h-4.708zm6.617-6.374h4.733v9.257l4.689-4.61h5.647l-5.934 5.76 6.643 9.52h-5.213l-4.433-6.598-1.405 1.362v5.236h-4.733V8.128zm50.143 0h4.734v9.257l4.688-4.61h5.647l-5.934 5.76 6.643 9.52h-5.206l-4.433-6.598-1.405 1.362v5.236h-4.734zm-54.396 4.826a2.384 2.384 0 1 0-.002-4.771 2.384 2.384 0 0 0 .002 4.771">
+                                    </path>
+                                    <path fill="#25F4EE"
+                                        d="M83.545 19.942a8.11 8.11 0 0 1 7.473-8.087 9 9 0 0 0-.709-.026c-4.478 0-8.106 3.631-8.106 8.113s3.628 8.113 8.106 8.113c.21 0 .498-.013.71-.026-4.178-.326-7.475-3.823-7.475-8.087">
+                                    </path>
+                                    <path fill="#FE2C55"
+                                        d="M92.858 11.83c-.217 0-.505.012-.715.025a8.11 8.11 0 0 1 7.467 8.087 8.11 8.11 0 0 1-7.467 8.087c.21.02.498.026.715.026 4.478 0 8.106-3.631 8.106-8.113s-3.628-8.113-8.106-8.113">
+                                    </path>
+                                    <path fill="#fff"
+                                        d="M91.58 23.887a3.94 3.94 0 0 1-3.94-3.945 3.94 3.94 0 1 1 7.882 0c0 2.18-1.77 3.945-3.941 3.945m0-12.058c-4.477 0-8.105 3.631-8.105 8.113s3.628 8.113 8.106 8.113 8.106-3.631 8.106-8.113-3.629-8.113-8.106-8.113">
+                                    </path>
+                                </svg>
+                            </div>
+                            <button id="reloadBtn"
+                                class="bg-primary text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-pink-700 transition">
+                                <i class="ri-refresh-line"></i>
+                                <span>Tải lại</span>
+                            </button>
+                        </div>
+
+                        <!-- Action buttons -->
+                        <div class="action-bar absolute right-4 bottom-72 flex flex-col items-center gap-6">
+                            <button class="w-12 h-12 flex flex-col items-center justify-center">
+                                <div
+                                    class="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-secondary overflow-hidden">
+                                    <img src="https://readdy.ai/api/search-image?query=young%2520woman%2520portrait%2C%2520professional%2520headshot%2C%2520smiling%2C%2520confident%2C%2520modern%2520style%2C%2520clean%2520background%2C%2520high%2520quality%2C%2520detailed%2520facial%2520features&width=200&height=200&seq=avatar1&orientation=squarish"
+                                        alt="Creator" class="w-full h-full object-cover" />
+                                </div>
+                            </button>
+                            <button class="w-12 h-12 flex flex-col items-center justify-center">
+                                <i class="ri-heart-line ri-2x"></i>
+                                <span class="text-xs mt-1">87.5K</span>
+                            </button>
+                            <button class="w-12 h-12 flex flex-col items-center justify-center">
+                                <i class="ri-chat-1-line ri-2x"></i>
+                                <span class="text-xs mt-1">2,342</span>
+                            </button>
+                            <button class="w-12 h-12 flex flex-col items-center justify-center">
+                                <i class="ri-share-forward-line ri-2x"></i>
+                                <span class="text-xs mt-1">Share</span>
+                            </button>
+                            <button id="prevBtn" class="w-12 h-12 flex flex-col items-center justify-center">
+                                <i class="ri-arrow-up-line ri-2x"></i>
+                                <span class="text-xs mt-1">Trước</span>
+                            </button>
+                            <button id="nextBtn" class="w-12 h-12 flex flex-col items-center justify-center">
+                                <i class="ri-arrow-down-line ri-2x"></i>
+                                <span class="text-xs mt-1">Sau</span>
+                            </button>
+                        </div>
+
+                        <!-- Bottom info -->
+                        <div class="flex flex-col gap-2 text-center">
+                            <div class="flex items-center gap-2 justify-center">
+                                <span id="videoTitle" class="font-semibold"></span>
+                            </div>
+                            <input id="seekBar" type="range" value="0" min="0" max="100" step="0.1" class="w-full" />
+                            <p class="text-sm text-gray-300 italic">Cuộn lên xuống để chuyển video</p>
+                        </div>
+                    </div>
+
+                    <!-- Nút mute + tốc độ phát -->
+                    <div id="controls-bar" class="absolute left-4 bottom-24 flex flex-col gap-2">
+
+                        <button id="muteBtn"
+                            class="w-8 h-8 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center">
+                            <i class="ri-volume-mute-line ri-xl"></i>
+                        </button>
+                        <select id="speed">
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>Normal</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                            <option value="4">4x</option>
+                        </select>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="script.js"></script>
+</body>
+
+</html>
