@@ -273,6 +273,82 @@
             font-size: 2.5rem;
             color: white;
         }
+
+        /* ===== 🎬 Hiệu ứng chuyển video lên/xuống ===== */
+        /* ===== 🎬 Hiệu ứng chuyển video nâng cao ===== */
+        .video-slide-up-exit,
+        .video-slide-down-exit {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            will-change: transform, opacity;
+        }
+
+        .video-slide-up-exit-active {
+            opacity: 0;
+            transform: translateY(-100%) scale(0.95);
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        }
+
+        .video-slide-down-exit-active {
+            opacity: 0;
+            transform: translateY(100%) scale(0.95);
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        }
+
+        .video-slide-up-enter,
+        .video-slide-down-enter {
+            opacity: 0;
+            transform: translateY(100%) scale(1.05);
+            will-change: transform, opacity;
+        }
+
+        .video-slide-up-enter-active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        }
+
+        .video-slide-down-enter {
+            transform: translateY(-100%) scale(1.05);
+        }
+
+        .video-slide-down-enter-active {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+        }
+
+
+        /* 🌀 Loading overlay */
+        #loadingOverlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.2);
+            /* nền mờ nhẹ */
+            backdrop-filter: blur(4px);
+            /* 👈 hiệu ứng blur giống TikTok */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 50;
+        }
+
+        #loadingOverlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #loadingOverlay .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 
@@ -309,10 +385,8 @@
                     </div>
 
                     <!-- Loading spinner -->
-                    <div id="loadingOverlay"
-                        class="hidden absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-                        <div class="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin">
-                        </div>
+                    <div id="loadingOverlay">
+                        <div class="spinner"></div>
                     </div>
 
                     <!-- Overlay controls -->
@@ -399,7 +473,7 @@
                         </button>
                         <select id="speed">
                             <option value="0.5">0.5x</option>
-                            <option value="1" selected>Normal</option>
+                            <option value="1" selected>1x</option>
                             <option value="1.5">1.5x</option>
                             <option value="2">2x</option>
                             <option value="4">4x</option>

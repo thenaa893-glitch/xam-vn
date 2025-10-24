@@ -97,7 +97,10 @@ async function loadVideoList(forceReload = false) {
 // ===========================
 // ▶️ Load video
 // ===========================
-function loadVideo(index, resumeTime = 0) {
+// ===========================
+// ▶️ Load video (phiên bản tối ưu)
+// ===========================
+function loadVideo(index, resumeTime = 0, direction = "up") {
   if (!videoList.length || isLoading) return;
 
   clearInterval(timeSaveInterval);
@@ -106,17 +109,19 @@ function loadVideo(index, resumeTime = 0) {
   currentIndex = (index + videoList.length) % videoList.length;
 
   localStorage.setItem(LAST_VIDEO_KEY, currentIndex);
-
   highlightCurrentVideo();
+
   const url = videoList[currentIndex].url;
   seekBar.disabled = true;
 
+  // 🧹 Cleanup video cũ
   if (hls) {
     hls.destroy();
     hls = null;
   }
   player.pause();
   player.removeAttribute("src");
+  player.preload = "metadata"; // ✅ preload metadata giúp load nhanh hơn
   player.load();
   player.classList.remove("showing");
 
@@ -124,53 +129,103 @@ function loadVideo(index, resumeTime = 0) {
   hideError();
   showLoading();
 
-  setTimeout(() => {
-    player.muted = userMuted;
-    updateMuteIcon();
+  // ===========================
+  // 🎞️ Hiệu ứng chuyển cảnh
+  // ===========================
+  player.classList.remove(
+    "video-slide-up-exit",
+    "video-slide-up-exit-active",
+    "video-slide-up-enter",
+    "video-slide-up-enter-active",
+    "video-slide-down-exit",
+    "video-slide-down-exit-active",
+    "video-slide-down-enter",
+    "video-slide-down-enter-active"
+  );
 
-    if (url.endsWith(".m3u8")) {
-      if (Hls.isSupported()) {
-        hls = new Hls();
-        hls.loadSource(url);
-        hls.attachMedia(player);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => safePlay(resumeTime));
-        hls.on(Hls.Events.ERROR, showLoadError);
-      } else if (player.canPlayType("application/vnd.apple.mpegurl")) {
+  // Áp dụng hiệu ứng thoát (slide lên/xuống)
+  player.classList.add(`video-slide-${direction}-exit`);
+  requestAnimationFrame(() => {
+    player.classList.add(`video-slide-${direction}-exit-active`);
+  });
+
+  // Sau 150ms thì đổi video mới
+  setTimeout(() => {
+    player.classList.remove(
+      `video-slide-${direction}-exit`,
+      `video-slide-${direction}-exit-active`
+    );
+
+    // Áp dụng hiệu ứng xuất hiện video mới
+    player.classList.add(`video-slide-${direction}-enter`);
+    requestAnimationFrame(() => {
+      player.classList.add(`video-slide-${direction}-enter-active`);
+    });
+
+    setTimeout(() => {
+      player.muted = userMuted;
+      updateMuteIcon();
+
+      // ===========================
+      // 🎬 Load video theo định dạng
+      // ===========================
+      if (url.endsWith(".m3u8")) {
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(url);
+          hls.attachMedia(player);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => safePlay(resumeTime));
+          hls.on(Hls.Events.ERROR, showLoadError);
+        } else if (player.canPlayType("application/vnd.apple.mpegurl")) {
+          player.src = url;
+          safePlay(resumeTime);
+        } else {
+          showLoadError();
+        }
+      } else {
         player.src = url;
         safePlay(resumeTime);
-      } else {
-        showLoadError();
       }
-    } else {
-      player.src = url;
-      safePlay(resumeTime);
-    }
 
-    player.onerror = () => showLoadError();
-    player.onplaying = () => {
-      hasPlayed = true;
-      clearTimeout(loadTimeout);
-      hideLoading();
-      seekBar.disabled = false;
-      isLoading = false;
+      player.onerror = () => showLoadError();
 
-      player.classList.add("showing");
+      player.onplaying = () => {
+        hasPlayed = true;
+        clearTimeout(loadTimeout);
+        hideLoading();
+        seekBar.disabled = false;
+        isLoading = false;
+        player.classList.add("showing");
 
-      timeSaveInterval = setInterval(() => {
-        if (!player.paused && player.currentTime > 0) {
-          localStorage.setItem(LAST_TIME_KEY, player.currentTime);
-        }
-      }, 1000);
-    };
+        // ✅ Lưu lại thời gian đang xem để resume
+        timeSaveInterval = setInterval(() => {
+          if (!player.paused && player.currentTime > 0) {
+            localStorage.setItem(LAST_TIME_KEY, player.currentTime);
+          }
+        }, 1000);
 
-    // 🔁 Khi phát xong → tự chuyển video tiếp theo
-    player.onended = () => loadVideo(currentIndex + 1);
+        // 🔮 Preload metadata của video kế tiếp
+        const nextIndex = (currentIndex + 1) % videoList.length;
+        const nextUrl = videoList[nextIndex].url;
+        const preloadVideo = document.createElement("video");
+        preloadVideo.preload = "metadata";
+        preloadVideo.src = nextUrl;
+        preloadVideo.muted = true;
+        preloadVideo.load();
+      };
 
-    loadTimeout = setTimeout(() => {
-      if (!hasPlayed) showLoadError();
-    }, 10000);
-  }, 200);
+      // 🔁 Khi phát xong → tự chuyển video tiếp theo
+      player.onended = () => loadVideo(currentIndex + 1, 0, "up");
+
+      // ⏳ Timeout an toàn 20s
+      loadTimeout = setTimeout(() => {
+        if (!hasPlayed) showLoadError();
+      }, 20000);
+    }, 150);
+  }, 150);
 }
+
+
 
 // ===========================
 // 🕒 Resume video cuối
@@ -263,11 +318,15 @@ function hideError() {
 }
 
 function showLoading() {
-  loadingOverlay.classList.remove("hidden");
+  if (!loadingOverlay.classList.contains("show")) {
+    loadingOverlay.classList.add("show");
+    loadingOverlay.style.backdropFilter = "blur(6px)";
+  }
 }
 
 function hideLoading() {
-  loadingOverlay.classList.add("hidden");
+  loadingOverlay.classList.remove("show");
+  loadingOverlay.style.backdropFilter = "blur(4px)";
 }
 
 function safePlay(time = 0) {
@@ -356,45 +415,31 @@ pausedOverlay.addEventListener("click", () => {
 // ===========================
 // ⬆⬇ Cuộn để chuyển
 // ===========================
+// PC scroll
 document.querySelector(".video-container").addEventListener("wheel", (e) => {
   const now = Date.now();
   if (isLoading || now - lastScrollTime < SCROLL_COOLDOWN) return;
   lastScrollTime = now;
-  if (e.deltaY > 0) loadVideo(currentIndex + 1);
-  else loadVideo(currentIndex - 1);
+  if (e.deltaY > 0) loadVideo(currentIndex + 1, 0, "up");
+  else loadVideo(currentIndex - 1, 0, "down");
 });
 
-// ===========================
-// 📱 Vuốt trên mobile để chuyển video
-// ===========================
+// Mobile swipe
 let touchStartY = 0;
 let touchEndY = 0;
-
 const videoContainer = document.querySelector(".video-container");
 
 videoContainer.addEventListener("touchstart", (e) => {
   touchStartY = e.touches[0].clientY;
 });
-
 videoContainer.addEventListener("touchend", (e) => {
   touchEndY = e.changedTouches[0].clientY;
-  handleSwipe();
+  const swipeDistance = touchEndY - touchStartY;
+  if (Math.abs(swipeDistance) < 50) return;
+  if (swipeDistance > 0) loadVideo(currentIndex - 1, 0, "down");
+  else loadVideo(currentIndex + 1, 0, "up");
 });
 
-function handleSwipe() {
-  const swipeDistance = touchEndY - touchStartY;
-
-  // Ngưỡng vuốt tối thiểu để tránh các cú chạm nhẹ
-  if (Math.abs(swipeDistance) < 50) return;
-
-  if (swipeDistance > 0) {
-    // Vuốt xuống → video trước
-    loadVideo(currentIndex - 1);
-  } else {
-    // Vuốt lên → video sau
-    loadVideo(currentIndex + 1);
-  }
-}
 
 // ===========================
 // ⏭ Buttons
