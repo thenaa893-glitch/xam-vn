@@ -26,6 +26,8 @@ let isLoading = false;
 let hasPlayed = false;
 let lastScrollTime = 0;
 const SCROLL_COOLDOWN = 800;
+let userMuted = false;
+let hasInteracted = false;
 
 // 📜 Lazy render config
 const PAGE_SIZE = 30;
@@ -34,6 +36,7 @@ let lazyLoading = false;
 
 // 🕒 Lưu thông tin video đã xem
 let watchedVideos = JSON.parse(localStorage.getItem("watchedVideos") || "{}");
+
 
 // 📥 Lấy danh sách video
 async function loadVideoList(forceReload = false) {
@@ -102,7 +105,12 @@ function loadVideo(index) {
   showLoading();
 
   setTimeout(() => {
-    player.muted = true;
+    if (!hasInteracted) {
+      // 👉 nếu chưa tương tác => autoplay ở chế độ mute
+      player.muted = true;
+    } else {
+      player.muted = userMuted;
+    }
     updateMuteIcon();
 
     if (url.endsWith(".m3u8")) {
@@ -262,10 +270,13 @@ function safePlay() {
 }
 
 
+
 // 🔇 Mute
 muteBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  hasInteracted = true;
   player.muted = !player.muted;
+  userMuted = player.muted;
   updateMuteIcon();
 });
 
