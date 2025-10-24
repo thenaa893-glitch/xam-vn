@@ -1,9 +1,13 @@
-// 📌 URL Google Sheet đã encode
+// ===========================
+// 🔗 Google Sheet URL
+// ===========================
 const encodedSheetUrl =
   "aHR0cHM6Ly9kb2NzLmdvb2dsZS5jb20vc3ByZWFkc2hlZXRzL2QvZS8yUEFDWC0xdlJXbWltYUVGNy1ON3ZmOXhsNTdCay1pc1lOWUNmY2xaT2Q4WWNDZ3FjTWh1SG5YSGR5MUFqQ2N2dVFiNG5wX2xSaWZSTDZXUkROY2JGMi9wdWI/b3V0cHV0PWNzdg==";
 const sheetUrl = atob(encodedSheetUrl);
 
-// 📺 DOM
+// ===========================
+// 🧠 DOM Elements
+// ===========================
 const player = document.getElementById("player");
 const seekBar = document.getElementById("seekBar");
 const speedSelect = document.getElementById("speed");
@@ -17,7 +21,9 @@ const errorOverlay = document.getElementById("errorOverlay");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const videoListContainer = document.getElementById("videoListContainer");
 
-// 🧠 Biến trạng thái
+// ===========================
+// 🧭 State
+// ===========================
 let videoList = [];
 let currentIndex = 0;
 let hls = null;
@@ -26,31 +32,35 @@ let isLoading = false;
 let hasPlayed = false;
 let lastScrollTime = 0;
 const SCROLL_COOLDOWN = 800;
-let userMuted = false;
-let hasInteracted = false;
+let timeSaveInterval = null;
 
-// 📜 Lazy render config
-const PAGE_SIZE = 30;
-let renderedCount = 0;
-let lazyLoading = false;
-
-// 🕒 Lưu thông tin video đã xem
+let userMuted = JSON.parse(localStorage.getItem("userMuted") || "true");
+const LAST_VIDEO_KEY = "lastWatchedVideoIndex";
+const LAST_TIME_KEY = "lastWatchedVideoTime";
 let watchedVideos = JSON.parse(localStorage.getItem("watchedVideos") || "{}");
 
+// ===========================
+// 🚀 Init after DOM ready
+// ===========================
+document.addEventListener("DOMContentLoaded", () => {
+  loadVideoList();
+});
 
+// ===========================
 // 📥 Lấy danh sách video
+// ===========================
 async function loadVideoList(forceReload = false) {
-  const saved = localStorage.getItem("videos");
-  seekBar.disabled = true;
-
-  if (saved && !forceReload) {
-    videoList = JSON.parse(saved);
-    renderVideoList(true);
-    loadVideo(0);
-    return;
-  }
-
   try {
+    const saved = localStorage.getItem("videos");
+    seekBar.disabled = true;
+
+    if (saved && !forceReload) {
+      videoList = JSON.parse(saved);
+      renderVideoList();
+      resumeLastVideo();
+      return;
+    }
+
     const res = await fetch(sheetUrl);
     const text = await res.text();
     videoList = text
@@ -59,58 +69,57 @@ async function loadVideoList(forceReload = false) {
       .slice(1)
       .map((line) => {
         const [id, url] = line.split(",");
-        return {
-          id: id.trim(),
-          url: url.trim()
-        };
+        return { id: id.trim(), url: url.trim() };
       });
 
     localStorage.setItem("videos", JSON.stringify(videoList));
-    renderVideoList(true);
-    loadVideo(0);
+    renderVideoList();
+    resumeLastVideo();
   } catch (e) {
-    console.error("Lỗi khi lấy video:", e);
+    console.error("❌ Lỗi khi lấy video:", e);
+    const saved = localStorage.getItem("videos");
     if (saved) {
       videoList = JSON.parse(saved);
-      renderVideoList(true);
-      loadVideo(0);
+      renderVideoList();
+      resumeLastVideo();
+    } else {
+      errorOverlay.classList.remove("hidden");
     }
   }
 }
 
-// 📺 Load video
-function loadVideo(index) {
+// ===========================
+// ▶️ Load video
+// ===========================
+function loadVideo(index, resumeTime = 0) {
   if (!videoList.length || isLoading) return;
 
+  clearInterval(timeSaveInterval);
   isLoading = true;
   hasPlayed = false;
   currentIndex = (index + videoList.length) % videoList.length;
+
+  localStorage.setItem(LAST_VIDEO_KEY, currentIndex);
 
   highlightCurrentVideo();
   const url = videoList[currentIndex].url;
   seekBar.disabled = true;
 
-  // cleanup video cũ
   if (hls) {
     hls.destroy();
     hls = null;
   }
   player.pause();
-  player.classList.remove("showing");
   player.removeAttribute("src");
   player.load();
+  player.classList.remove("showing");
 
   videoTitle.textContent = `Video #${videoList[currentIndex].id}`;
   hideError();
   showLoading();
 
   setTimeout(() => {
-    if (!hasInteracted) {
-      // 👉 nếu chưa tương tác => autoplay ở chế độ mute
-      player.muted = true;
-    } else {
-      player.muted = userMuted;
-    }
+    player.muted = userMuted;
     updateMuteIcon();
 
     if (url.endsWith(".m3u8")) {
@@ -118,43 +127,38 @@ function loadVideo(index) {
         hls = new Hls();
         hls.loadSource(url);
         hls.attachMedia(player);
-        hls.on(Hls.Events.MANIFEST_PARSED, safePlay);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => safePlay(resumeTime));
         hls.on(Hls.Events.ERROR, showLoadError);
       } else if (player.canPlayType("application/vnd.apple.mpegurl")) {
         player.src = url;
-        safePlay();
+        safePlay(resumeTime);
       } else {
         showLoadError();
       }
     } else {
       player.src = url;
-      safePlay();
+      safePlay(resumeTime);
     }
 
     player.onerror = () => showLoadError();
-
     player.onplaying = () => {
       hasPlayed = true;
       clearTimeout(loadTimeout);
       hideLoading();
       seekBar.disabled = false;
       isLoading = false;
+
       player.classList.add("showing");
 
-      // 📝 Lưu thời gian xem
-      const now = new Date();
-      const formatted = now.toLocaleString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit"
-      });
-      watchedVideos[videoList[currentIndex].id] = formatted;
-      localStorage.setItem("watchedVideos", JSON.stringify(watchedVideos));
-      updateWatchedStatus();
+      timeSaveInterval = setInterval(() => {
+        if (!player.paused && player.currentTime > 0) {
+          localStorage.setItem(LAST_TIME_KEY, player.currentTime);
+        }
+      }, 1000);
     };
+
+    // 🔁 Khi phát xong → tự chuyển video tiếp theo
+    player.onended = () => loadVideo(currentIndex + 1);
 
     loadTimeout = setTimeout(() => {
       if (!hasPlayed) showLoadError();
@@ -162,79 +166,81 @@ function loadVideo(index) {
   }, 200);
 }
 
-// 📝 Render danh sách video
-function renderVideoList(reset = false) {
-  if (reset) {
-    renderedCount = 0;
-    videoListContainer.innerHTML = "";
+// ===========================
+// 🕒 Resume video cuối
+// ===========================
+function resumeLastVideo() {
+  const lastIndex = parseInt(localStorage.getItem(LAST_VIDEO_KEY));
+  const resumeTime = parseFloat(localStorage.getItem(LAST_TIME_KEY)) || 0;
+  if (!isNaN(lastIndex) && lastIndex >= 0 && lastIndex < videoList.length) {
+    loadVideo(lastIndex, resumeTime);
+  } else {
+    loadVideo(0);
   }
+}
 
-  const end = Math.min(renderedCount + PAGE_SIZE, videoList.length);
-  for (let i = renderedCount; i < end; i++) {
-    const video = videoList[i];
+// ===========================
+// 📝 Render danh sách video
+// ===========================
+function renderVideoList() {
+  videoListContainer.innerHTML = "";
+  videoList.forEach((video, index) => {
     const li = document.createElement("li");
-    li.className = "flex items-start p-2 cursor-pointer";
+    li.className =
+      "flex items-center justify-between px-2 py-2 hover:bg-gray-800/30 transition";
 
-    // 📌 Thay vì thumbnail — dùng màu nền
     const thumb = document.createElement("div");
-    thumb.className = "w-20 h-12 bg-gray-800 rounded mb-1 flex items-center justify-center text-xs text-gray-400";
+    thumb.className =
+      "w-16 h-9 rounded bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-xs font-bold";
     thumb.textContent = `#${video.id}`;
 
     const info = document.createElement("div");
-    info.className = "text-sm text-white";
-    info.textContent = `Video #${video.id}`;
-
-    const watched = document.createElement("div");
-    watched.className = "text-xs text-gray-400 italic mt-1 watched-time";
-
-    if (watchedVideos[video.id]) {
-      watched.textContent = `Đã xem: ${watchedVideos[video.id]}`;
-    }
+    info.className = "flex-1 ml-2 text-sm truncate";
+    const watched = watchedVideos[video.id];
+    info.textContent = watched ? `Đã xem: ${watched}` : `Chưa xem`;
 
     li.appendChild(thumb);
     li.appendChild(info);
-    li.appendChild(watched);
-    li.addEventListener("click", () => loadVideo(i));
-    videoListContainer.appendChild(li);
-  }
+    li.addEventListener("click", () => loadVideo(index));
 
-  renderedCount = end;
-  lazyLoading = false;
+    videoListContainer.appendChild(li);
+  });
+
   highlightCurrentVideo();
 }
 
-// 🔁 Cập nhật dòng “Đã xem” sau khi xem xong
-function updateWatchedStatus() {
-  const items = videoListContainer.querySelectorAll("li");
-  items.forEach((item, i) => {
-    const id = videoList[i].id;
-    const watchedEl = item.querySelector(".watched-time");
-    if (watchedVideos[id]) {
-      watchedEl.textContent = `Đã xem: ${watchedVideos[id]}`;
-    } else {
-      watchedEl.textContent = "";
-    }
-  });
-}
-
-// ✨ Highlight video đang phát
+// ===========================
+// ✨ Highlight video
+// ===========================
 function highlightCurrentVideo() {
   const allItems = videoListContainer.querySelectorAll("li");
   allItems.forEach((item, i) =>
-    item.classList.toggle("active-video", i === currentIndex)
+    item.classList.toggle("bg-gray-800/50", i === currentIndex)
   );
 
-  const activeItem = videoListContainer.querySelector("li.active-video");
-  if (activeItem) {
-    activeItem.scrollIntoView({
-      block: "nearest",
-      behavior: "smooth"
-    });
-  }
+  const currentVideo = videoList[currentIndex];
+  const now = new Date();
+  const formattedTime = `${now.getDate().toString().padStart(2, "0")}-${(
+    now.getMonth() + 1
+  )
+    .toString()
+    .padStart(2, "0")}-${now.getFullYear()} ${now
+    .getHours()
+    .toString()
+    .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now
+    .getSeconds()
+    .toString()
+    .padStart(2, "0")}`;
+  watchedVideos[currentVideo.id] = formattedTime;
+  localStorage.setItem("watchedVideos", JSON.stringify(watchedVideos));
+
+  const infoEl = allItems[currentIndex].querySelector(".flex-1");
+  if (infoEl) infoEl.textContent = `Đã xem: ${formattedTime}`;
 }
 
-
-// ⚠️ Lỗi & loading
+// ===========================
+// ⏳ Lỗi & Loading
+// ===========================
 function showLoadError() {
   clearTimeout(loadTimeout);
   hideLoading();
@@ -245,48 +251,41 @@ function showLoadError() {
     loadVideo(currentIndex + 1);
   }, 2000);
 }
-
 function hideError() {
   errorOverlay.classList.add("hidden");
 }
-
 function showLoading() {
   loadingOverlay.classList.remove("hidden");
 }
-
 function hideLoading() {
   loadingOverlay.classList.add("hidden");
 }
 
-function safePlay() {
+function safePlay(time = 0) {
+  if (time > 0) player.currentTime = time;
   const p = player.play();
-  if (p !== undefined) {
-    p.catch(err => {
-      if (err.name !== "AbortError") {
-        console.warn("Autoplay lỗi khác:", err);
-      }
-    });
-  }
+  if (p !== undefined) p.catch(() => {});
 }
 
-
-
+// ===========================
 // 🔇 Mute
+// ===========================
 muteBtn.addEventListener("click", (e) => {
   e.stopPropagation();
-  hasInteracted = true;
-  player.muted = !player.muted;
-  userMuted = player.muted;
+  userMuted = !userMuted;
+  localStorage.setItem("userMuted", JSON.stringify(userMuted));
+  player.muted = userMuted;
   updateMuteIcon();
 });
-
 function updateMuteIcon() {
-  muteBtn.innerHTML = player.muted ?
-    `<i class="ri-volume-mute-line ri-xl"></i>` :
-    `<i class="ri-volume-up-line ri-xl"></i>`;
+  muteBtn.innerHTML = player.muted
+    ? `<i class="ri-volume-mute-line ri-xl"></i>`
+    : `<i class="ri-volume-up-line ri-xl"></i>`;
 }
 
-// 🖱️ Click video => pause/play
+// ===========================
+// 🖱️ Click video Pause/Play
+// ===========================
 document.querySelector(".video-container").addEventListener("click", (e) => {
   if (e.target === muteBtn) return;
   if (player.paused) {
@@ -294,60 +293,40 @@ document.querySelector(".video-container").addEventListener("click", (e) => {
     showPlayPauseIcon("pause");
   } else {
     player.pause();
+    player.classList.remove("showing");
     showPlayPauseIcon("play");
   }
 });
-
 function showPlayPauseIcon(state) {
   playPauseOverlay.classList.remove("hidden");
   playPauseOverlay.querySelector("i").className =
-    state === "play" ? "ri-play-fill text-white text-6xl" : "ri-pause-fill text-white text-6xl";
+    state === "play"
+      ? "ri-play-fill text-white text-6xl"
+      : "ri-pause-fill text-white text-6xl";
   setTimeout(() => playPauseOverlay.classList.add("hidden"), 600);
 }
 
+// ===========================
 // ⏪ Tua & tốc độ
+// ===========================
 player.addEventListener("timeupdate", () => {
   if (player.duration && isFinite(player.duration)) {
     seekBar.value = (player.currentTime / player.duration) * 100;
   }
 });
-let wasPlaying = false;
-
-seekBar.addEventListener("mousedown", () => {
-  // Ghi nhận trạng thái phát
-  wasPlaying = !player.paused;
-  // Tạm dừng khi người dùng bắt đầu tua
-  player.pause();
-});
-
 seekBar.addEventListener("input", () => {
   if (player.duration && isFinite(player.duration)) {
     player.currentTime = (seekBar.value / 100) * player.duration;
+    player.play(); // tua xong tự phát
   }
 });
-
-seekBar.addEventListener("mouseup", () => {
-  // Nếu trước đó video đang phát → phát lại sau khi tua
-  if (wasPlaying) {
-    safePlay();
-  }
-});
-
 speedSelect.addEventListener("change", () => {
   player.playbackRate = parseFloat(speedSelect.value);
 });
 
-seekBar.addEventListener("touchstart", () => {
-  wasPlaying = !player.paused;
-  player.pause();
-});
-
-seekBar.addEventListener("touchend", () => {
-  if (wasPlaying) safePlay();
-});
-
-
-// ⬆⬇ Cuộn để chuyển video
+// ===========================
+// ⬆⬇ Cuộn để chuyển
+// ===========================
 document.querySelector(".video-container").addEventListener("wheel", (e) => {
   const now = Date.now();
   if (isLoading || now - lastScrollTime < SCROLL_COOLDOWN) return;
@@ -356,27 +335,9 @@ document.querySelector(".video-container").addEventListener("wheel", (e) => {
   else loadVideo(currentIndex - 1);
 });
 
-// 📜 Tự động load thêm khi cuộn gần cuối
-videoListContainer.addEventListener("scroll", () => {
-  const {
-    scrollTop,
-    scrollHeight,
-    clientHeight
-  } = videoListContainer;
-  if (!lazyLoading && scrollTop + clientHeight >= scrollHeight - 50 && renderedCount < videoList.length) {
-    lazyLoading = true;
-    renderVideoList();
-  }
-});
-
-// ⏭ Nút điều khiển
+// ===========================
+// ⏭ Buttons
+// ===========================
 prevBtn.addEventListener("click", () => loadVideo(currentIndex - 1));
 nextBtn.addEventListener("click", () => loadVideo(currentIndex + 1));
 reloadBtn.addEventListener("click", () => loadVideoList(true));
-// ⏭ Tự động chuyển video khi phát xong
-player.addEventListener("ended", () => {
-  loadVideo(currentIndex + 1);
-});
-
-// 🚀 Khởi động
-loadVideoList();
