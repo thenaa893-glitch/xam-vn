@@ -365,6 +365,38 @@ document.querySelector(".video-container").addEventListener("wheel", (e) => {
 });
 
 // ===========================
+// 📱 Vuốt trên mobile để chuyển video
+// ===========================
+let touchStartY = 0;
+let touchEndY = 0;
+
+const videoContainer = document.querySelector(".video-container");
+
+videoContainer.addEventListener("touchstart", (e) => {
+  touchStartY = e.touches[0].clientY;
+});
+
+videoContainer.addEventListener("touchend", (e) => {
+  touchEndY = e.changedTouches[0].clientY;
+  handleSwipe();
+});
+
+function handleSwipe() {
+  const swipeDistance = touchEndY - touchStartY;
+
+  // Ngưỡng vuốt tối thiểu để tránh các cú chạm nhẹ
+  if (Math.abs(swipeDistance) < 50) return;
+
+  if (swipeDistance > 0) {
+    // Vuốt xuống → video trước
+    loadVideo(currentIndex - 1);
+  } else {
+    // Vuốt lên → video sau
+    loadVideo(currentIndex + 1);
+  }
+}
+
+// ===========================
 // ⏭ Buttons
 // ===========================
 prevBtn.addEventListener("click", () => loadVideo(currentIndex - 1));
