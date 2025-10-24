@@ -20,6 +20,9 @@ const playPauseOverlay = document.getElementById("playPauseOverlay");
 const errorOverlay = document.getElementById("errorOverlay");
 const loadingOverlay = document.getElementById("loadingOverlay");
 const videoListContainer = document.getElementById("videoListContainer");
+const pausedOverlay = document.getElementById("pausedOverlay");
+const resumeBtn = document.getElementById("resumeBtn");
+
 
 // ===========================
 // 🧭 State
@@ -69,7 +72,10 @@ async function loadVideoList(forceReload = false) {
       .slice(1)
       .map((line) => {
         const [id, url] = line.split(",");
-        return { id: id.trim(), url: url.trim() };
+        return {
+          id: id.trim(),
+          url: url.trim()
+        };
       });
 
     localStorage.setItem("videos", JSON.stringify(videoList));
@@ -251,12 +257,15 @@ function showLoadError() {
     loadVideo(currentIndex + 1);
   }, 2000);
 }
+
 function hideError() {
   errorOverlay.classList.add("hidden");
 }
+
 function showLoading() {
   loadingOverlay.classList.remove("hidden");
 }
+
 function hideLoading() {
   loadingOverlay.classList.add("hidden");
 }
@@ -277,10 +286,11 @@ muteBtn.addEventListener("click", (e) => {
   player.muted = userMuted;
   updateMuteIcon();
 });
+
 function updateMuteIcon() {
-  muteBtn.innerHTML = player.muted
-    ? `<i class="ri-volume-mute-line ri-xl"></i>`
-    : `<i class="ri-volume-up-line ri-xl"></i>`;
+  muteBtn.innerHTML = player.muted ?
+    `<i class="ri-volume-mute-line ri-xl"></i>` :
+    `<i class="ri-volume-up-line ri-xl"></i>`;
 }
 
 // ===========================
@@ -290,21 +300,22 @@ document.querySelector(".video-container").addEventListener("click", (e) => {
   if (e.target === muteBtn) return;
   if (player.paused) {
     player.play();
-    showPlayPauseIcon("pause");
+    // showPlayPauseIcon("pause");
   } else {
     player.pause();
-    player.classList.remove("showing");
-    showPlayPauseIcon("play");
+    // player.classList.remove("showing");
+    // showPlayPauseIcon("play");
   }
 });
-function showPlayPauseIcon(state) {
-  playPauseOverlay.classList.remove("hidden");
-  playPauseOverlay.querySelector("i").className =
-    state === "play"
-      ? "ri-play-fill text-white text-6xl"
-      : "ri-pause-fill text-white text-6xl";
-  setTimeout(() => playPauseOverlay.classList.add("hidden"), 600);
-}
+
+// function showPlayPauseIcon(state) {
+//   playPauseOverlay.classList.remove("hidden");
+//   playPauseOverlay.querySelector("i").className =
+//     state === "play" ?
+//     "ri-play-fill text-white text-6xl" :
+//     "ri-pause-fill text-white text-6xl";
+//   setTimeout(() => playPauseOverlay.classList.add("hidden"), 600);
+// }
 
 // ===========================
 // ⏪ Tua & tốc độ
@@ -316,6 +327,7 @@ player.addEventListener("timeupdate", () => {
 });
 seekBar.addEventListener("input", () => {
   if (player.duration && isFinite(player.duration)) {
+    showLoading(); // 👈 hiện loading khi tua
     player.currentTime = (seekBar.value / 100) * player.duration;
     player.play(); // tua xong tự phát
   }
@@ -323,7 +335,24 @@ seekBar.addEventListener("input", () => {
 speedSelect.addEventListener("change", () => {
   player.playbackRate = parseFloat(speedSelect.value);
 });
+// Khi video pause -> show overlay
+player.addEventListener("pause", () => {
+  if (!player.ended) {
+    pausedOverlay.classList.add("show");
+  }
+});
 
+// Khi video phát -> ẩn overlay
+player.addEventListener("play", () => {
+  pausedOverlay.classList.remove("show");
+});
+player.addEventListener("playing", () => {
+  hideLoading(); // 👈 ẩn loading khi video phát trở lại
+});
+// Nút resume
+pausedOverlay.addEventListener("click", () => {
+  player.play();
+});
 // ===========================
 // ⬆⬇ Cuộn để chuyển
 // ===========================
