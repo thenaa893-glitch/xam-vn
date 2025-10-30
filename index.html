@@ -7,8 +7,8 @@
     <title>TikTok - Make Your Day</title>
     <link rel="icon" href="favicon.ico">
     <script src="https://cdn.tailwindcss.com/3.4.16"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" />
-    <script src="hls.js"></script>
+    
+    <link rel="preconnect" href="https://docs.google.com" crossorigin>
     <script>
         tailwind.config = {
             theme: {
@@ -51,7 +51,7 @@
         /* Mute button - Riêng nút mute vẫn có pointer-events mặc định để click được */
         #muteBtn {
             position: absolute;
-            bottom: 6rem;
+            bottom: 8rem;
             pointer-events: auto;
             left: 1rem;
             width: 48px;
@@ -138,13 +138,92 @@
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 9999px;
-            padding: 0.5rem 1rem;
-            bottom: 3rem;
+            padding: 0.25rem 1rem;
+        }
+        .seek-button {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .seek-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
         }
 
         /* Video list container - Đảm bảo cuộn trong sidebar không cuộn trang chính */
         #videoListContainer {
             overscroll-behavior: contain;
+            scroll-behavior: smooth;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+        }
+
+        /* ===== 📱 Mobile Sidebar Overlay ===== */
+        #videoListSidebar {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        /* Mobile/Tablet: Sidebar as overlay */
+        @media (max-width: 1023px) {
+            #videoListSidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: 280px;
+                max-width: 85vw;
+                z-index: 1000;
+                transform: translateX(-100%);
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+                display: flex !important; /* Override hidden class */
+            }
+
+            #videoListSidebar.open {
+                transform: translateX(0);
+            }
+
+            /* Overlay backdrop */
+            #sidebarOverlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+            }
+
+            #sidebarOverlay.show {
+                opacity: 1;
+                visibility: visible;
+            }
+        }
+
+        /* Desktop: Keep original behavior */
+        @media (min-width: 1024px) {
+            #videoListSidebar {
+                position: relative;
+                transform: none !important;
+            }
+        }
+
+        /* Custom scrollbar for webkit browsers */
+        #videoListContainer::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #videoListContainer::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #videoListContainer::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+
+        #videoListContainer::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
 
         #videoListContainer li {
@@ -223,7 +302,7 @@
         /* Bottom info bar */
         .bottom-info-bar {
             position: absolute;
-            bottom: 3rem;
+            bottom: 1.25rem;
             left: 1rem;
             width: calc(100% - 2rem);
             z-index: 1000;
@@ -354,12 +433,19 @@
 
 <body class="bg-black text-white">
     <div id="app" class="h-full flex flex-col">
+        <!-- 📱 Sidebar Overlay (Mobile/Tablet) -->
+        <div id="sidebarOverlay" class="lg:hidden"></div>
+        
         <div id="main-content" class="container mx-auto flex-1 relative flex">
             <!-- 📜 Sidebar bên trái -->
             <div id="videoListSidebar"
                 class="hidden lg:flex flex-col w-64 bg-black/30 backdrop-blur-sm border-r border-gray-800">
-                <div class="p-4 text-lg font-semibold border-b border-gray-700">
-                    Danh sách video
+                <div class="p-4 text-lg font-semibold border-b border-gray-700 flex items-center justify-between">
+                    <span>Danh sách video</span>
+                    <!-- Close button for mobile -->
+                    <button id="sidebarClose" class="lg:hidden text-gray-400 hover:text-white transition">
+                        <img src="fonts/icons/System/close-line.svg" class="w-5 h-5 invert" />
+                    </button>
                 </div>
                 <ul id="videoListContainer"
                     class="flex-1 divide-y divide-gray-700 overflow-y-auto max-h-[calc(100vh-4rem)]">
@@ -370,12 +456,12 @@
             <!-- 📽️ Video chính -->
             <div id="feed-view" class="flex-1 relative">
                 <div class="video-container">
-                    <video id="player" autoplay playsinline class="w-full h-full object-contain bg-black"></video>
+                    <video id="player" autoplay playsinline preload="none" class="w-full h-full object-contain bg-black"></video>
 
                     <!-- Icon pause/play -->
                     <div id="playPauseOverlay"
                         class="hidden absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-                        <i class="ri-play-fill text-white text-6xl"></i>
+                        <img src="fonts/icons/Media/play-fill.svg" class="w-16 h-16 invert" />
                     </div>
 
                     <!-- Thông báo lỗi -->
@@ -393,40 +479,49 @@
                     <div class="video-overlay absolute inset-0 flex flex-col justify-between p-4">
                         <!-- Top bar -->
                         <div class="flex justify-between items-center">
-                            <div class="text-2xl font-['Pacifico']">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 118 30"
-                                    alt="TikTok" height="42" width="118"
-                                    class="css-1pylepm-5e6d46e3--StyledLogoDark e1487oh22">
-                                    <path fill="#25F4EE"
-                                        d="M9.875 11.842v-1.119A9 9 0 0 0 8.7 10.64c-4.797-.006-8.7 3.9-8.7 8.708a8.7 8.7 0 0 0 3.718 7.134A8.68 8.68 0 0 1 1.38 20.55c0-4.737 3.794-8.598 8.495-8.707">
-                                    </path>
-                                    <path fill="#25F4EE"
-                                        d="M10.087 24.526c2.14 0 3.89-1.707 3.966-3.83l.007-18.968h3.462a7 7 0 0 1-.109-1.202h-4.727l-.006 18.968a3.98 3.98 0 0 1-3.967 3.83 3.9 3.9 0 0 1-1.846-.46 3.95 3.95 0 0 0 3.22 1.662m13.905-16.36V7.111a6.5 6.5 0 0 1-3.584-1.067 6.57 6.57 0 0 0 3.584 2.122">
-                                    </path>
-                                    <path fill="#FE2C55"
-                                        d="M20.41 6.044a6.54 6.54 0 0 1-1.617-4.316h-1.265a6.56 6.56 0 0 0 2.881 4.316M8.707 15.365a3.98 3.98 0 0 0-3.974 3.976c0 1.528.87 2.858 2.134 3.523a3.94 3.94 0 0 1-.754-2.321 3.98 3.98 0 0 1 3.973-3.976c.41 0 .805.07 1.176.185v-4.833a9 9 0 0 0-1.176-.083c-.07 0-.134.006-.204.006v3.708a4 4 0 0 0-1.175-.185">
-                                    </path>
-                                    <path fill="#FE2C55"
-                                        d="M23.992 8.166v3.676a11.25 11.25 0 0 1-6.579-2.116v9.622c0 4.8-3.903 8.713-8.706 8.713a8.67 8.67 0 0 1-4.99-1.579 8.7 8.7 0 0 0 6.37 2.781c4.797 0 8.706-3.906 8.706-8.714v-9.621a11.25 11.25 0 0 0 6.579 2.116v-4.73q-.718-.002-1.38-.148">
-                                    </path>
-                                    <path fill="#fff"
-                                        d="M17.413 19.348V9.726a11.25 11.25 0 0 0 6.58 2.116V8.166a6.57 6.57 0 0 1-3.584-2.122 6.6 6.6 0 0 1-2.887-4.316h-3.463l-.006 18.968a3.98 3.98 0 0 1-3.967 3.83 3.99 3.99 0 0 1-3.225-1.656 3.99 3.99 0 0 1-2.134-3.523A3.98 3.98 0 0 1 8.7 15.372c.409 0 .805.07 1.176.185v-3.708c-4.702.103-8.496 3.964-8.496 8.701 0 2.29.888 4.373 2.338 5.933a8.67 8.67 0 0 0 4.989 1.58c4.797 0 8.706-3.913 8.706-8.715M30.048 8.179h14.775l-1.355 4.232h-3.832v15.644h-4.778V12.41l-4.804.006zm38.984 0h15.12l-1.354 4.232h-4.172v15.644h-4.784V12.41l-4.803.006zM45.73 14.502h4.733v13.553h-4.708zm6.617-6.374h4.733v9.257l4.689-4.61h5.647l-5.934 5.76 6.643 9.52h-5.213l-4.433-6.598-1.405 1.362v5.236h-4.733V8.128zm50.143 0h4.734v9.257l4.688-4.61h5.647l-5.934 5.76 6.643 9.52h-5.206l-4.433-6.598-1.405 1.362v5.236h-4.734zm-54.396 4.826a2.384 2.384 0 1 0-.002-4.771 2.384 2.384 0 0 0 .002 4.771">
-                                    </path>
-                                    <path fill="#25F4EE"
-                                        d="M83.545 19.942a8.11 8.11 0 0 1 7.473-8.087 9 9 0 0 0-.709-.026c-4.478 0-8.106 3.631-8.106 8.113s3.628 8.113 8.106 8.113c.21 0 .498-.013.71-.026-4.178-.326-7.475-3.823-7.475-8.087">
-                                    </path>
-                                    <path fill="#FE2C55"
-                                        d="M92.858 11.83c-.217 0-.505.012-.715.025a8.11 8.11 0 0 1 7.467 8.087 8.11 8.11 0 0 1-7.467 8.087c.21.02.498.026.715.026 4.478 0 8.106-3.631 8.106-8.113s-3.628-8.113-8.106-8.113">
-                                    </path>
-                                    <path fill="#fff"
-                                        d="M91.58 23.887a3.94 3.94 0 0 1-3.94-3.945 3.94 3.94 0 1 1 7.882 0c0 2.18-1.77 3.945-3.941 3.945m0-12.058c-4.477 0-8.105 3.631-8.105 8.113s3.628 8.113 8.106 8.113 8.106-3.631 8.106-8.113-3.629-8.113-8.106-8.113">
-                                    </path>
-                                </svg>
+                            <div class="flex items-center gap-3">
+                                <!-- Sidebar Toggle Button (Mobile/Tablet) -->
+                                <button id="sidebarToggle" 
+                                    class="lg:hidden bg-black/50 backdrop-blur-sm text-white p-2 rounded-lg hover:bg-black/70 transition-all duration-200">
+                                    <img src="fonts/icons/System/menu-line.svg" class="w-5 h-5 invert" />
+                                </button>
+                                
+                                <div class="text-2xl font-['Pacifico']">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 118 30"
+                                        alt="TikTok" height="42" width="118"
+                                        class="css-1pylepm-5e6d46e3--StyledLogoDark e1487oh22">
+                                        <path fill="#25F4EE"
+                                            d="M9.875 11.842v-1.119A9 9 0 0 0 8.7 10.64c-4.797-.006-8.7 3.9-8.7 8.708a8.7 8.7 0 0 0 3.718 7.134A8.68 8.68 0 0 1 1.38 20.55c0-4.737 3.794-8.598 8.495-8.707">
+                                        </path>
+                                        <path fill="#25F4EE"
+                                            d="M10.087 24.526c2.14 0 3.89-1.707 3.966-3.83l.007-18.968h3.462a7 7 0 0 1-.109-1.202h-4.727l-.006 18.968a3.98 3.98 0 0 1-3.967 3.83 3.9 3.9 0 0 1-1.846-.46 3.95 3.95 0 0 0 3.22 1.662m13.905-16.36V7.111a6.5 6.5 0 0 1-3.584-1.067 6.57 6.57 0 0 0 3.584 2.122">
+                                        </path>
+                                        <path fill="#FE2C55"
+                                            d="M20.41 6.044a6.54 6.54 0 0 1-1.617-4.316h-1.265a6.56 6.56 0 0 0 2.881 4.316M8.707 15.365a3.98 3.98 0 0 0-3.974 3.976c0 1.528.87 2.858 2.134 3.523a3.94 3.94 0 0 1-.754-2.321 3.98 3.98 0 0 1 3.973-3.976c.41 0 .805.07 1.176.185v-4.833a9 9 0 0 0-1.176-.083c-.07 0-.134.006-.204.006v3.708a4 4 0 0 0-1.175-.185">
+                                        </path>
+                                        <path fill="#FE2C55"
+                                            d="M23.992 8.166v3.676a11.25 11.25 0 0 1-6.579-2.116v9.622c0 4.8-3.903 8.713-8.706 8.713a8.67 8.67 0 0 1-4.99-1.579 8.7 8.7 0 0 0 6.37 2.781c4.797 0 8.706-3.906 8.706-8.714v-9.621a11.25 11.25 0 0 0 6.579 2.116v-4.73q-.718-.002-1.38-.148">
+                                        </path>
+                                        <path fill="#fff"
+                                            d="M17.413 19.348V9.726a11.25 11.25 0 0 0 6.58 2.116V8.166a6.57 6.57 0 0 1-3.584-2.122 6.6 6.6 0 0 1-2.887-4.316h-3.463l-.006 18.968a3.98 3.98 0 0 1-3.967 3.83 3.99 3.99 0 0 1-3.225-1.656 3.99 3.99 0 0 1-2.134-3.523A3.98 3.98 0 0 1 8.7 15.372c.409 0 .805.07 1.176.185v-3.708c-4.702.103-8.496 3.964-8.496 8.701 0 2.29.888 4.373 2.338 5.933a8.67 8.67 0 0 0 4.989 1.58c4.797 0 8.706-3.913 8.706-8.715M30.048 8.179h14.775l-1.355 4.232h-3.832v15.644h-4.778V12.41l-4.804.006zm38.984 0h15.12l-1.354 4.232h-4.172v15.644h-4.784V12.41l-4.803.006zM45.73 14.502h4.733v13.553h-4.708zm6.617-6.374h4.733v9.257l4.689-4.61h5.647l-5.934 5.76 6.643 9.52h-5.213l-4.433-6.598-1.405 1.362v5.236h-4.733V8.128zm50.143 0h4.734v9.257l4.688-4.61h5.647l-5.934 5.76 6.643 9.52h-5.206l-4.433-6.598-1.405 1.362v5.236h-4.734zm-54.396 4.826a2.384 2.384 0 1 0-.002-4.771 2.384 2.384 0 0 0 .002 4.771">
+                                        </path>
+                                        <path fill="#25F4EE"
+                                            d="M83.545 19.942a8.11 8.11 0 0 1 7.473-8.087 9 9 0 0 0-.709-.026c-4.478 0-8.106 3.631-8.106 8.113s3.628 8.113 8.106 8.113c.21 0 .498-.013.71-.026-4.178-.326-7.475-3.823-7.475-8.087">
+                                        </path>
+                                        <path fill="#FE2C55"
+                                            d="M92.858 11.83c-.217 0-.505.012-.715.025a8.11 8.11 0 0 1 7.467 8.087 8.11 8.11 0 0 1-7.467 8.087c.21.02.498.026.715.026 4.478 0 8.106-3.631 8.106-8.113s-3.628-8.113-8.106-8.113">
+                                        </path>
+                                        <path fill="#fff"
+                                            d="M91.58 23.887a3.94 3.94 0 0 1-3.94-3.945 3.94 3.94 0 1 1 7.882 0c0 2.18-1.77 3.945-3.941 3.945m0-12.058c-4.477 0-8.105 3.631-8.105 8.113s3.628 8.113 8.106 8.113 8.106-3.631 8.106-8.113-3.629-8.113-8.106-8.113">
+                                        </path>
+                                    </svg>
+                                </div>
                             </div>
+                            
                             <button id="reloadBtn"
                                 class="bg-primary text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-pink-700 transition">
-                                <i class="ri-refresh-line"></i>
-                                <span>Tải lại</span>
+                                <img src="fonts/icons/System/refresh-line.svg" class="w-5 h-5 invert" />
+                                <span class="hidden sm:inline">Tải lại</span>
                             </button>
                         </div>
 
@@ -435,59 +530,80 @@
                             <button class="w-12 h-12 flex flex-col items-center justify-center">
                                 <div
                                     class="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-secondary overflow-hidden">
-                                    <img src="https://readdy.ai/api/search-image?query=young%2520woman%2520portrait%2C%2520professional%2520headshot%2C%2520smiling%2C%2520confident%2C%2520modern%2520style%2C%2520clean%2520background%2C%2520high%2520quality%2C%2520detailed%2520facial%2520features&width=200&height=200&seq=avatar1&orientation=squarish"
+                                    <img src="avatar.webp"
                                         alt="Creator" class="w-full h-full object-cover" />
                                 </div>
                             </button>
                             <button class="w-12 h-12 flex flex-col items-center justify-center">
-                                <i class="ri-heart-line ri-2x"></i>
+                                <img src="fonts/icons/Health & Medical/heart-line.svg" class="w-8 h-8 invert" />
                                 <span class="text-xs mt-1">87.5K</span>
                             </button>
                             <button class="w-12 h-12 flex flex-col items-center justify-center">
-                                <i class="ri-chat-1-line ri-2x"></i>
+                                <img src="fonts/icons/Communication/chat-1-line.svg" class="w-8 h-8 invert" />
                                 <span class="text-xs mt-1">2,342</span>
                             </button>
                             <button class="w-12 h-12 flex flex-col items-center justify-center">
-                                <i class="ri-share-forward-line ri-2x"></i>
+                                <img src="fonts/icons/System/share-forward-line.svg" class="w-8 h-8 invert" />
                                 <span class="text-xs mt-1">Share</span>
                             </button>
                             <button id="prevBtn" class="w-12 h-12 flex flex-col items-center justify-center">
-                                <i class="ri-arrow-up-line ri-2x"></i>
+                                <img src="fonts/icons/Arrows/arrow-up-line.svg" class="w-8 h-8 invert" />
                                 <span class="text-xs mt-1">Trước</span>
                             </button>
                             <button id="nextBtn" class="w-12 h-12 flex flex-col items-center justify-center">
-                                <i class="ri-arrow-down-line ri-2x"></i>
+                                <img src="fonts/icons/Arrows/arrow-down-line.svg" class="w-8 h-8 invert" />
                                 <span class="text-xs mt-1">Sau</span>
                             </button>
                         </div>
-
-
                     </div>
 
                     <!-- Nút mute + tốc độ phát -->
                     <div id="controls-bar" class="absolute left-4 bottom-24 flex flex-col gap-2">
-
-                        <button id="muteBtn"
-                            class="w-8 h-8 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center">
-                            <i class="ri-volume-mute-line ri-xl"></i>
-                        </button>
-                        <select id="speed">
-                            <option value="0.5">0.5x</option>
-                            <option value="1" selected>1x</option>
-                            <option value="1.5">1.5x</option>
-                            <option value="2">2x</option>
-                            <option value="4">4x</option>
-                        </select>
+                        <div class="flex gap-2">
+                            <button id="muteBtn"
+                                class="w-8 h-8 rounded-full bg-gradient-to-r from-primary to-secondary flex items-center justify-center">
+                                <img src="fonts/icons/Media/volume-mute-line.svg" class="w-6 h-6 invert" />
+                            </button>
+                        </div>
+                        <div class="flex gap-2">
+                            <select id="speed">
+                                <option value="0.5">0.5x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                                <option value="4">4x</option>
+                            </select>
+                        </div>
+                        <!-- Seek controls -->
+                        <div id="seekControls" class="flex gap-2">
+                            <div class="flex gap-2">
+                                <button id="seekBack60" class="seek-button px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-xs">-1m</button>
+                                <button id="seekBack30" class="seek-button px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-xs">-30s</button>
+                                <button id="seekBack10" class="seek-button px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-xs">-10s</button>
+                                <button id="seekFwd10" class="seek-button px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-xs">+10s</button>
+                                <button id="seekFwd30" class="seek-button px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-xs">+30s</button>
+                                <button id="seekFwd60" class="seek-button px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-xs">+1m</button>
+                            </div>
+                        </div>
+                        <!-- Jump to video by ID -->
+                        <div class="flex gap-2 items-center">
+                            <input id="jumpId" type="text" inputmode="numeric" placeholder="ID video"
+                                    class="w-24 px-2 py-1 rounded-lg bg-black/60 border border-white/20 text-sm"
+                            />
+                            <button id="jumpBtn" class="px-2 py-1 rounded-lg bg-black/60 hover:bg-black/80 border border-white/20 text-sm">
+                                Tới
+                            </button>
+                        </div>
                     </div>
 
                 </div>
                 <div id="pausedOverlay" class="hidden">
                     <button id="resumeBtn">
-                        <i class="ri-play-fill"></i>
+                        <img src="fonts/icons/Media/play-fill.svg" class="w-10 h-10 invert" />
                     </button>
                 </div>
                 <!-- Bottom info -->
-                <div class="bottom-info-bar flex flex-col gap-2 text-center">
+                <div class="bottom-info-bar flex flex-col text-center">
                     <div class="flex items-center gap-2 justify-center">
                         <span id="videoTitle" class="font-semibold"></span>
                     </div>
@@ -499,7 +615,8 @@
     </div>
 
 
-    <script src="script.js"></script>
+    <script src="hls.js" defer></script>
+    <script src="script.js" defer></script>
 </body>
 
 </html>
